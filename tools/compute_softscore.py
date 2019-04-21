@@ -1,4 +1,20 @@
-from __future__ import print_function
+"""
+여러 answer 가 혼재하는 Annotation 으로부터 학습 가능한 label: score data 를 생성.
+
+일단 모든 answer 에 대해 preprocessing 을 해주고,
+multiple_choice_answer 를 GT 로 보고 그 GT 가 얼마나 많은 질문에 대해 
+정답이었는지를 체크하여 이게 threshold (=9) 이상 되는 FreqGT 만 정답셋으로 사용. (why?)
+
+이 FreqGT 들이 candidate answer set 이 되는데,
+GT 가 아니었더라도 FreqGT set 안에 있고 answer set 에서 등장하면 soft score 를 준다.
+
+반대로 얘기하면 GT 였더라도 FreqGT set 안에 못들어가면 (빈발이 아니라서 짤리면)
+점수를 아예 못 받음.
+
+where come from this?
+=> VQA tip and tricks paper.
+"""
+
 import os
 import sys
 import json
@@ -7,7 +23,6 @@ import re
 import pickle
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from dataset import Dictionary
 import utils
 
 
@@ -135,6 +150,9 @@ def filter_answers(answers_dset, min_occurence):
     """
     occurence = {}
 
+    # multiple_choice_answer 를 GT 로 보고, 일단 전처리.
+    # 그리고 각 GT 마다 몇개의 질문에서 이게 답인지를 카운팅해서,
+    # 그게 min_occurence 횟수 이상으로 답인 GT 들을 골라냄.
     for ans_entry in answers_dset:
         answers = ans_entry['answers']
         gtruth = ans_entry['multiple_choice_answer']
@@ -142,7 +160,7 @@ def filter_answers(answers_dset, min_occurence):
         if gtruth not in occurence:
             occurence[gtruth] = set()
         occurence[gtruth].add(ans_entry['question_id'])
-    for answer in occurence.keys():
+    for answer in list(occurence.keys()):
         if len(occurence[answer]) < min_occurence:
             occurence.pop(answer)
 
@@ -158,6 +176,8 @@ def create_ans2label(occurence, name, cache_root='data/cache'):
     name: prefix of the output file
     cache_root: str
     """
+    # 위에서 만든 빈발 GT 마다 인덱스를 매겨서 label 이라 부르고,
+    # 거기에 대한 매핑 딕셔너릴르 만들어서 저장.
     ans2label = {}
     label2ans = []
     label = 0
@@ -186,12 +206,15 @@ def compute_target(answers_dset, ans2label, name, cache_root='data/cache'):
     for ans_entry in answers_dset:
         answers = ans_entry['answers']
         answer_count = {}
+        # Q 마다 10개의 A 가 있으니, 각 A 가 몇번 나왔는지 카운팅
         for answer in answers:
             answer_ = answer['answer']
             answer_count[answer_] = answer_count.get(answer_, 0) + 1
 
         labels = []
         scores = []
+        # 이 정답이 위에서 걸러낸 빈발 GT 에 있으면 label 로 인정하고
+        # score = 등장횟수 * 0.3 (최대 1.0) 으로 점수를 줌.
         for answer in answer_count:
             if answer not in ans2label:
                 continue
@@ -225,6 +248,7 @@ def get_question(qid, questions):
 
 
 if __name__ == '__main__':
+    print("Loading Q/A files ...")
     train_answer_file = 'data/v2_mscoco_train2014_annotations.json'
     train_answers = json.load(open(train_answer_file))['annotations']
 
@@ -237,8 +261,12 @@ if __name__ == '__main__':
     val_question_file = 'data/v2_OpenEnded_mscoco_val2014_questions.json'
     val_questions = json.load(open(val_question_file))['questions']
 
+    print("Filter answers ...")
     answers = train_answers + val_answers
     occurence = filter_answers(answers, 9)
+    print("Create ans2label ...")
     ans2label = create_ans2label(occurence, 'trainval')
+    print("Compute targets ...")
     compute_target(train_answers, ans2label, 'train')
     compute_target(val_answers, ans2label, 'val')
+    print("Done !")

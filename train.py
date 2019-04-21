@@ -15,7 +15,7 @@ def instance_bce_with_logits(logits, labels):
 
 
 def compute_score_with_logits(logits, labels):
-    logits = torch.max(logits, 1)[1].data # argmax
+    logits = torch.max(logits, 1)[1] # argmax
     one_hots = torch.zeros(*labels.size()).cuda()
     one_hots.scatter_(1, logits.view(-1, 1), 1)
     scores = (one_hots * labels)
@@ -46,8 +46,8 @@ def train(model, train_loader, eval_loader, num_epochs, output):
             optim.step()
             optim.zero_grad()
 
-            batch_score = compute_score_with_logits(pred, a.data).sum()
-            total_loss += loss.data[0] * v.size(0)
+            batch_score = compute_score_with_logits(pred, a).sum()
+            total_loss += loss.item() * v.size(0)
             train_score += batch_score
 
         total_loss /= len(train_loader.dataset)

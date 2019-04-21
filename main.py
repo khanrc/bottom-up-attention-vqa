@@ -38,7 +38,8 @@ if __name__ == '__main__':
     model = getattr(base_model, constructor)(train_dset, args.num_hid).cuda()
     model.w_emb.init_embedding('data/glove6b_init_300d.npy')
 
-    model = nn.DataParallel(model).cuda()
+    #model = nn.DataParallel(model).cuda()
+    model = model.cuda()
 
     train_loader = DataLoader(train_dset, batch_size, shuffle=True, num_workers=1)
     eval_loader =  DataLoader(eval_dset, batch_size, shuffle=True, num_workers=1)
